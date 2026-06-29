@@ -1,0 +1,12 @@
+{
+  "run_id": "run-2024-06-15",
+  "model": "gpt-4o-mini",
+  "dataset": "qa-benchmark-v1",
+  "timestamp": "2024-06-15T10:00:00Z",
+  "metrics": {
+    "accuracy": 0.756,
+    "f1": 0.796,
+    "precision": 0.742,
+    "recall": 0.794
+  }
+}
