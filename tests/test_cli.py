@@ -26,6 +26,19 @@ class _CaptureStdout:
         sys.stdout = self._orig
 
 
+class _CaptureStderr:
+    """Context manager that captures sys.stderr into a StringIO buffer."""
+
+    def __enter__(self):
+        self._buf = io.StringIO()
+        self._orig = sys.stderr
+        sys.stderr = self._buf
+        return self._buf
+
+    def __exit__(self, *_):
+        sys.stderr = self._orig
+
+
 class TestCLICompareExitCodes(unittest.TestCase):
     def test_exit_0_when_no_drift(self):
         with _CaptureStdout():
@@ -106,10 +119,30 @@ class TestCLICompareJSONOutput(unittest.TestCase):
 
 
 class TestCLIErrors(unittest.TestCase):
-    def test_missing_file_raises(self):
-        with self.assertRaises(FileNotFoundError):
-            main(["compare", "/nonexistent.json", CANDIDATE_OK])
+    def test_missing_baseline_exits_2(self):
+        with _CaptureStdout(), _CaptureStderr() as err:
+            code = main(["compare", "/nonexistent_baseline.json", CANDIDATE_OK])
+        self.assertEqual(code, 2)
+        self.assertIn("not found", err.getvalue())
 
-    def test_missing_candidate_raises(self):
-        with self.assertRaises(FileNotFoundError):
-            main(["compare", BASELINE, "/nonexistent.json"])
+    def test_missing_candidate_exits_2(self):
+        with _CaptureStdout(), _CaptureStderr() as err:
+            code = main(["compare", BASELINE, "/nonexistent_candidate.json"])
+        self.assertEqual(code, 2)
+        self.assertIn("not found", err.getvalue())
+
+    def test_missing_baseline_names_path_in_error(self):
+        with _CaptureStdout(), _CaptureStderr() as err:
+            main(["compare", "/no_such_file.json", CANDIDATE_OK])
+        self.assertIn("/no_such_file.json", err.getvalue())
+
+    def test_unknown_metric_warns_to_stderr(self):
+        with _CaptureStdout(), _CaptureStderr() as err:
+            main(["compare", BASELINE, CANDIDATE_OK, "--metrics", "ghost_metric"])
+        self.assertIn("ghost_metric", err.getvalue())
+
+    def test_all_unknown_metrics_exits_2(self):
+        with _CaptureStdout(), _CaptureStderr() as err:
+            code = main(["compare", BASELINE, CANDIDATE_OK, "--metrics", "ghost_metric"])
+        self.assertEqual(code, 2)
+        self.assertIn("no metrics were compared", err.getvalue())

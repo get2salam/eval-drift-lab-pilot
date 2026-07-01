@@ -42,8 +42,18 @@ class DriftReport:
             "=================",
             f"Baseline : {self.baseline_id}  ({self.baseline_model} / {self.baseline_dataset})",
             f"Candidate: {self.candidate_id}  ({self.candidate_model} / {self.candidate_dataset})",
-            "",
         ]
+        if self.baseline_model != self.candidate_model:
+            lines.append(
+                f"NOTE: models differ — baseline='{self.baseline_model}',"
+                f" candidate='{self.candidate_model}'"
+            )
+        if self.baseline_dataset != self.candidate_dataset:
+            lines.append(
+                f"NOTE: datasets differ — baseline='{self.baseline_dataset}',"
+                f" candidate='{self.candidate_dataset}'"
+            )
+        lines.append("")
         col_w = max((len(r.name) for r in self.results), default=10) + 2
         header = (
             f"{'Metric':<{col_w}}  {'Baseline':>10}  {'Candidate':>10}  {'Delta':>10}  Status"

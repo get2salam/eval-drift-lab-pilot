@@ -47,10 +47,50 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _load_run(path: str, label: str) -> "tuple[EvalRun | None, int]":
+    """Load an EvalRun, printing a clean error to stderr on failure.
+
+    Returns (run, 0) on success or (None, 2) on any input error.
+    """
+    try:
+        return EvalRun.from_file(path), 0
+    except FileNotFoundError:
+        print(f"Error: {label} file not found: {path}", file=sys.stderr)
+        return None, 2
+    except json.JSONDecodeError as exc:
+        print(f"Error: {label} is not valid JSON — {exc}", file=sys.stderr)
+        return None, 2
+    except (ValueError, TypeError) as exc:
+        print(f"Error: {label} is invalid — {exc}", file=sys.stderr)
+        return None, 2
+
+
 def _cmd_compare(args: argparse.Namespace) -> int:
-    baseline = EvalRun.from_file(args.baseline)
-    candidate = EvalRun.from_file(args.candidate)
+    baseline, rc = _load_run(args.baseline, "baseline")
+    if baseline is None:
+        return rc
+    candidate, rc = _load_run(args.candidate, "candidate")
+    if candidate is None:
+        return rc
+
+    if args.metrics:
+        available = set(baseline.metrics) | set(candidate.metrics)
+        unknown = [m for m in args.metrics if m not in available]
+        if unknown:
+            print(
+                f"Warning: metric(s) not found in either run: {', '.join(unknown)}",
+                file=sys.stderr,
+            )
+
     report = compare(baseline, candidate, threshold=args.threshold, metrics=args.metrics)
+
+    if not report.results:
+        print(
+            "Warning: no metrics were compared — check that the requested"
+            " metric names exist in both runs.",
+            file=sys.stderr,
+        )
+        return 2
 
     if args.json_output:
         data = {

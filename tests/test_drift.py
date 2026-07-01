@@ -135,3 +135,45 @@ class TestCompareFixtures(unittest.TestCase):
         candidate = EvalRun.from_file(FIXTURE_DIR / "candidate_ok.json")
         report = compare(baseline, candidate)
         self.assertEqual(len(report.results), 4)
+
+
+class TestDriftReportMismatchNotices(unittest.TestCase):
+    """Summary should surface model/dataset mismatches so users catch bad comparisons."""
+
+    def _make_run(self, run_id, model, dataset, metrics=None):
+        return EvalRun(
+            run_id=run_id,
+            model=model,
+            dataset=dataset,
+            timestamp="2024-01-01T00:00:00Z",
+            metrics=metrics or {"accuracy": 0.80},
+        )
+
+    def test_no_notice_when_same_model_and_dataset(self):
+        baseline = self._make_run("b", "gpt-4o-mini", "qa-v1")
+        candidate = self._make_run("c", "gpt-4o-mini", "qa-v1")
+        summary = compare(baseline, candidate).summary()
+        self.assertNotIn("NOTE:", summary)
+
+    def test_model_mismatch_note_appears_in_summary(self):
+        baseline = self._make_run("b", "gpt-4o-mini", "qa-v1")
+        candidate = self._make_run("c", "gpt-4o", "qa-v1")
+        summary = compare(baseline, candidate).summary()
+        self.assertIn("NOTE:", summary)
+        self.assertIn("gpt-4o-mini", summary)
+        self.assertIn("gpt-4o", summary)
+
+    def test_dataset_mismatch_note_appears_in_summary(self):
+        baseline = self._make_run("b", "gpt-4o-mini", "qa-v1")
+        candidate = self._make_run("c", "gpt-4o-mini", "qa-v2")
+        summary = compare(baseline, candidate).summary()
+        self.assertIn("NOTE:", summary)
+        self.assertIn("qa-v1", summary)
+        self.assertIn("qa-v2", summary)
+
+    def test_both_mismatch_notes_appear_together(self):
+        baseline = self._make_run("b", "model-a", "ds-1")
+        candidate = self._make_run("c", "model-b", "ds-2")
+        summary = compare(baseline, candidate).summary()
+        self.assertIn("models differ", summary)
+        self.assertIn("datasets differ", summary)
