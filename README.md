@@ -34,14 +34,18 @@ eval-drift-lab-pilot/
 │   ├── parser.py         # EvalRun dataclass + JSON loader/validator
 │   ├── drift.py          # compare() engine + DriftReport
 │   └── cli.py            # argparse CLI (eval-drift compare ...)
+├── examples/
+│   └── detect_renamed_metrics.py  # runnable example: catch metrics that vanish on rename
 ├── tests/
 │   ├── fixtures/
-│   │   ├── baseline.json          # reference evaluation run
-│   │   ├── candidate_ok.json      # no drift (all deltas < 0.05)
-│   │   └── candidate_drifted.json # drift detected (accuracy, precision)
-│   ├── test_parser.py    # 14 unit tests for the parser
-│   ├── test_drift.py     # 17 unit tests for the comparison engine
-│   └── test_cli.py       # 13 integration tests for the CLI
+│   │   ├── baseline.json                 # reference evaluation run
+│   │   ├── candidate_ok.json              # no drift (all deltas < 0.05)
+│   │   ├── candidate_drifted.json         # drift detected (accuracy, precision)
+│   │   └── candidate_renamed_metric.json  # "recall" renamed to "recall_score"
+│   ├── test_parser.py    # unit tests for the parser
+│   ├── test_drift.py     # unit tests for the comparison engine
+│   ├── test_cli.py       # integration tests for the CLI
+│   └── test_examples.py  # guard test for examples/detect_renamed_metrics.py
 ├── .github/workflows/test.yml
 ├── pyproject.toml
 └── README.md
@@ -193,13 +197,54 @@ Options:
 
 ---
 
+## Gotcha: renamed metrics vanish silently
+
+`compare()` only scores metric names present in **both** runs — it skips any
+key that's missing from either side rather than flagging it. So if a pipeline
+change renames a metric between eval runs (`recall` becomes `recall_score`),
+neither name appears in the report. There's no DRIFT flag and no warning —
+the metric just isn't there, which can read as "nothing to see here" instead
+of "this metric disappeared."
+
+`examples/detect_renamed_metrics.py` reproduces this against the bundled
+fixtures and shows the two-line guard you can add to your own CI script to
+catch it — compare the metric *key sets* yourself before trusting the report:
+
+```bash
+python examples/detect_renamed_metrics.py
+```
+
+```
+Eval Drift Report
+=================
+Baseline : run-2024-06-01  (gpt-4o-mini / qa-benchmark-v1)
+Candidate: run-2024-06-22  (gpt-4o-mini / qa-benchmark-v1)
+
+Metric         Baseline   Candidate       Delta  Status
+-------------------------------------------------------
+accuracy         0.8230      0.8270     +0.0040  OK
+f1               0.8010      0.7980     -0.0030  OK
+precision        0.8150      0.8190     +0.0040  OK
+
+Drifted metrics: 0 / 3  (threshold: ±0.05)
+Status: CLEAN (exit code 0)
+
+Guard: 2 metric(s) present in only one run and silently excluded from the report above: ['recall', 'recall_score']
+```
+
+`eval-drift` itself reports `CLEAN`, but the guard (exit code 1) shows that
+`recall` quietly disappeared. Treat "no drift" as "no drift among the metrics
+that survived the comparison," not "nothing changed."
+
+---
+
 ## Verification
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Expected output: `Ran 44 tests in <time>s — OK`
+Expected output: `Ran 54 tests in <time>s — OK`
 
 ---
 
